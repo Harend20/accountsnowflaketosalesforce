@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce" xmlns:snowflake="http://www.mulesoft.org/schema/mule/snowflake"
+	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/snowflake http://www.mulesoft.org/schema/mule/snowflake/current/mule-snowflake.xsd
+http://www.mulesoft.org/schema/mule/salesforce http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd">
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="02f8160f-f87e-42f7-87e5-bc5ad6ab3423" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<snowflake:snowflake-config name="Snowflake_Config" doc:name="Snowflake Config" doc:id="0c9b48db-a306-41cd-9b9b-6bfe6664aca8" >
+		<snowflake:snowflake-connection accountName="qc01016.eu-west-2.aws" warehouse="COMPUTE_WH" database="MULESOFT2020" schema="PUBLIC" user="harendratwenty20" password="DataSciFi1612#" />
+	</snowflake:snowflake-config>
+	<salesforce:sfdc-config name="Salesforce_Config" doc:name="Salesforce Config" doc:id="aa173da3-db9f-4047-827e-92a0553e92b9" >
+		<salesforce:basic-connection username="harendra@mulesoft.com" password="DataSciFi1612#" securityToken="U8PUtoXoIZX85h1ix6l2pxSR" />
+	</salesforce:sfdc-config>
+	<flow name="accountsnowflaketosalesforceFlow" doc:id="3ac9e693-5284-4de8-92f5-9deafc3c885b" >
+		<http:listener doc:name="Listener" doc:id="fbd8ad06-2514-41c1-84dc-0e6a9a68945c" path="/AccSNtoSF" config-ref="HTTP_Listener_config"/>
+		<snowflake:select doc:name="SelectData" doc:id="b563252f-f217-4720-af6e-d9d654c63a2f" config-ref="Snowflake_Config">
+			<snowflake:sql ><![CDATA[select * from haren_account]]></snowflake:sql>
+		</snowflake:select>
+		<ee:transform doc:name="MapSFtoSN" doc:id="d50fda3a-c9e2-46b2-bae8-6eb430d995d7" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+---
+payload map ( payload01 , indexOfPayload01 ) -> {
+	Name: payload01.NAME,
+	NAME1__c: payload01.NAME,
+	ID1__c: payload01.EXTERNALID,
+	EXTERNALPULSEID__c: payload01.ID
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<salesforce:upsert doc:name="UpsertingAccounts" doc:id="f820dac5-5a5d-4f06-bc7a-1cfe4e703580" config-ref="Salesforce_Config" objectType="Account" externalIdFieldName="Id"/>
+		<logger level="INFO" doc:name="Logger" doc:id="85172e1e-a86a-4d5b-96fb-015d838c3914" message='#["Record is inserted in Salesforce."]'/>
+		<error-handler >
+			<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="6377a99a-12a9-4433-9cc4-8e0bf1c05076" type="SALESFORCE:INVALID_INPUT, SALESFORCE:TIMEOUT, SNOWFLAKE:INVALID_CREDENTIALS, SNOWFLAKE:INVALID_INPUT">
+				<set-payload value="#[error.description]" doc:name="Set Payload" doc:id="20dc7230-89cf-4692-a24b-5e00f01bfb5e" />
+			</on-error-continue>
+			<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="01c2fc60-76d4-42a2-8a2c-2492172876cf" type="SALESFORCE:CONNECTIVITY, SALESFORCE:NOT_FOUND, SNOWFLAKE:CONNECTIVITY, SNOWFLAKE:INVALID_CREDENTIALS, SNOWFLAKE:NOT_FOUND">
+				<set-payload value="#[error.description]" doc:name="Set Payload" doc:id="427de699-d9be-4ff2-b11c-dfce14ef935d" />
+			</on-error-propagate>
+		</error-handler>
+	</flow>
+</mule>
